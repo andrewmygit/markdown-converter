@@ -1,0 +1,40 @@
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/
+.cache/
+.cache-*/
+
+# Archives and local backups
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.gz
+*.bak
+*.backup
+*.old
+
+# Node artifacts, если когда-нибудь появятся
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Environment files
+.env
+.env.*

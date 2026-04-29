@@ -1,0 +1,33 @@
+# Static Markdown converter subdirectory hardening.
+# The app is a static HTML/JS bundle. PHP and other executable scripts
+# must not run from this directory even when the parent site is PHP-based.
+
+Options -Indexes
+DirectoryIndex index.html
+
+# Do not let inherited handlers execute script-like files here.
+RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .php8 .phar .cgi .pl .py .rb .sh
+RemoveType .php .phtml .php3 .php4 .php5 .php7 .php8 .phar .cgi .pl .py .rb .sh
+
+# Deny direct access to executable/script-like files if somebody uploads or
+# accidentally copies them into this directory.
+<FilesMatch "\.(?:php[0-9]?|phtml|phar|phps|cgi|pl|py|rb|sh|bash|zsh|ksh|lua|asp|aspx|jsp)$">
+  Require all denied
+</FilesMatch>
+
+# Deny common hidden and local configuration files.
+<FilesMatch "(^\.|(?:^|/)(?:composer\.(?:json|lock)|package(?:-lock)?\.json|\.env|.*\.(?:bak|old|orig|save|swp|sql|sqlite|db|log|ini|conf|config|yml|yaml|toml|lock))$)">
+  Require all denied
+</FilesMatch>
+
+# Basic MIME hardening for static files used by this app.
+AddType text/css .css
+AddType application/javascript .js
+AddType image/svg+xml .svg
+AddType text/markdown .md
+AddType text/html .html
+
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>

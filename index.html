@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="und">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script>
+(() => {
+  const SETTINGS_KEY = 'md-local-modern-settings-v1';
+  function normalizeLanguage(value) {
+    return value === 'ru' || value === 'en' ? value : null;
+  }
+  function browserLanguage() {
+    const languages = Array.isArray(navigator.languages) && navigator.languages.length ? navigator.languages : [navigator.language || 'en'];
+    return languages.some((item) => String(item || '').toLowerCase().startsWith('ru')) ? 'ru' : 'en';
+  }
+  function savedExplicitLanguage() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+      return raw && raw.languageExplicit === true ? normalizeLanguage(raw.language) : null;
+    } catch {
+      return null;
+    }
+  }
+  const lang = savedExplicitLanguage() || browserLanguage();
+  document.documentElement.setAttribute('lang', lang);
+  document.documentElement.dataset.bootLang = lang;
+  document.documentElement.classList.remove('lang-en', 'lang-ru');
+  document.documentElement.classList.add('lang-' + lang);
+  window.__MD_LOCAL_BOOT_LANG__ = lang;
+})();
+</script>
+<link rel="icon" type="image/svg+xml" href="md.svg">
+<title>Markdown → HTML — локальный конвертер</title>
+<meta name="description" content="Локальный конвертер Markdown в HTML с предпросмотром, формулами, Mermaid-схемами, экспортом и копированием результата.">
+<script data-boot-meta="i18n">
+(() => {
+  if (window.__MD_LOCAL_BOOT_LANG__ !== 'en') return;
+  document.title = 'Markdown → HTML — local converter';
+  document.querySelector('meta[name="description"]')?.setAttribute('content', 'Local Markdown to HTML converter with preview, formulas, Mermaid diagrams, export, and result copying.');
+})();
+</script>
+<link rel="preload" href="js/markdown-it-all.min.js" as="script" fetchpriority="high">
+<link rel="preload" href="js/mermaid.min.js" as="script">
+<link rel="preload" href="assets/app.css" as="style" fetchpriority="high">
+<style id="critical-style">
+:root {
+  --bg: #0b1020;
+  --bg-elev: rgba(19, 28, 54, 0.86);
+  --panel: rgba(14, 21, 41, 0.92);
+  --border: rgba(148, 163, 184, 0.18);
+  --text: #e5e7eb;
+  --muted: #94a3b8;
+  --accent: #60a5fa;
+  --shadow: 0 20px 40px rgba(2, 6, 23, 0.32);
+  --radius: 18px;
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --bg: #eef3ff;
+  --bg-elev: rgba(255, 255, 255, 0.9);
+  --panel: rgba(255, 255, 255, 0.96);
+  --border: rgba(15, 23, 42, 0.1);
+  --text: #0f172a;
+  --muted: #475569;
+  --accent: #2563eb;
+  --shadow: 0 18px 36px rgba(15, 23, 42, 0.08);
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(96, 165, 250, 0.22), transparent 28%),
+    radial-gradient(circle at top right, rgba(52, 211, 153, 0.16), transparent 24%),
+    linear-gradient(180deg, var(--bg) 0%, color-mix(in srgb, var(--bg) 88%, black) 100%);
+  color: var(--text);
+}
+.app {
+  width: min(1500px, calc(100% - 24px));
+  margin: 16px auto;
+}
+.hero, .toolbar, .metrics, .panel {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+html[data-boot-lang="en"]:not(.boot-i18n-ready) body {
+  visibility: hidden;
+}
+</style>
+<link id="app-stylesheet" rel="stylesheet" href="assets/app.css">
+</head>
+<body class="app-shell">
+<div class="app">
+  <header class="hero">
+    <div class="hero-top">
+      <div>
+        <h1>Markdown → HTML</h1>
+        <p>Полностью локальный конвертер: Markdown, итоговый HTML, живой предпросмотр, формулы KaTeX, Mermaid-схемы, экспорт HTML и копирование результата как кода, текста и rich-text.</p>
+      </div>
+      <div class="chips">
+        <span class="chip">Мобильный интерфейс</span>
+        <span class="chip">Поддержка формул и схем</span>
+        <span class="chip">Локальное автосохранение</span>
+      </div>
+    </div>
+  </header>
+
+  <section class="toolbar">
+  <div class="toolbar-row">
+    <div class="toolbar-group">
+      <button class="btn primary" id="convert">Преобразовать</button>
+      <button class="btn" id="pasteBtn">Вставить</button>
+      <button class="btn" id="importBtn">Импорт .md</button>
+      <button class="btn ghost" id="clearBtn">Очистить</button>
+      <button class="btn small" data-view="markdown">Markdown</button>
+      <button class="btn small" data-view="split">Split</button>
+      <button class="btn small" data-view="preview">Просмотр</button>
+      <button class="btn small" data-view="html">HTML</button>
+      <input id="fileInput" type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" hidden>
+    </div>
+    <div class="toolbar-group toolbar-group-end">
+      <label class="visually-hidden" for="languageSelect">Language</label>
+      <select class="btn small language-select" id="languageSelect" aria-label="Language">
+        <option value="en">English</option>
+        <option value="ru">Русский</option>
+      </select>
+      <div class="status" id="renderStatus">
+        <span class="status-dot"></span>
+        <span id="statusText">Ожидание</span>
+      </div>
+      <button class="btn" id="menuBtn" aria-expanded="false" aria-controls="controlMenu">Меню</button>
+    </div>
+  </div>
+</section>
+
+<div class="menu-overlay" id="menuOverlay" hidden></div>
+<aside class="control-menu" id="controlMenu" aria-hidden="true" inert>
+  <div class="control-menu__head">
+    <div>
+      <div class="panel-title">Меню</div>
+      <div class="panel-subtitle">Настройки, копирование, экспорт и тестовый пример</div>
+    </div>
+    <button class="btn small ghost" id="menuCloseBtn" aria-label="Закрыть меню">Закрыть</button>
+  </div>
+
+  <div class="control-menu__body">
+    <section class="menu-section">
+      <div class="menu-section__title">Режим просмотра</div>
+      <div class="menu-actions">
+        <button class="btn small" id="liveBtn">Live</button>
+        <button class="btn small" id="syncBtn">Синхр. скролл</button>
+        <button class="btn small" id="lineNumbersBtn">Номера строк</button>
+        <button class="btn small" id="themeBtn">Светлая тема</button>
+      </div>
+    </section>
+
+    <section class="menu-section">
+      <div class="menu-section__title">Действия</div>
+      <div class="menu-actions">
+        <button class="btn small" id="sampleBtn">Тестовый пример</button>
+        <button class="btn small" id="precleanBtn">Предочистка: вкл</button>
+      </div>
+    </section>
+
+    <section class="menu-section">
+      <div class="menu-section__title">Копирование</div>
+      <div class="menu-actions">
+        <button class="btn success" id="copyHtmlBtn">Копировать HTML</button>
+        <button class="btn success" id="copyTextBtn">Копировать текст</button>
+        <button class="btn success" id="copyRichBtn">Копировать rich-text</button>
+      </div>
+    </section>
+
+    <section class="menu-section">
+      <div class="menu-section__title">Экспорт</div>
+      <div class="menu-actions">
+        <button class="btn warn" id="downloadHtmlBtn">Скачать HTML</button>
+        <button class="btn warn" id="downloadMdBtn">Скачать .md</button>
+        <button class="btn warn" id="downloadDocxBtn" disabled>Скачать .docx</button>
+        <button class="btn" id="printBtn">PDF / печать</button>
+      </div>
+    </section>
+
+    <section class="menu-section cleaner-box cleaner-box--menu">
+      <div class="cleaner-head">
+        <div class="panel-title panel-title--small">Предочистка перед рендером</div>
+        <div class="cleaner-meta" id="cleanMeta">Предочистка включена. Изменений в текущем тексте не найдено.</div>
+      </div>
+      <div class="cleaner-grid">
+        <label class="cleaner-option"><input type="checkbox" id="cleanEnabled" checked> <span><strong>Включить предварительную очистку</strong><span class="cleaner-sub">Очистка применяется только перед рендером. Исходный Markdown в редакторе не переписывается.</span></span></label>
+        <label class="cleaner-option"><input type="checkbox" id="cleanHidden" checked> <span>Удалять BOM / zero-width / bidi-символы<span class="cleaner-sub">Полезно для невидимого мусора из веб-страниц и мессенджеров.</span></span></label>
+        <label class="cleaner-option"><input type="checkbox" id="cleanNbsp" checked> <span>Нормализовать NBSP и узкий NBSP<span class="cleaner-sub">Преобразует неразрывные пробелы в обычные, кроме защищённых Markdown-сегментов.</span></span></label>
+        <label class="cleaner-option"><input type="checkbox" id="cleanQuotes"> <span>Нормализовать кавычки<span class="cleaner-sub">Преобразует “ ” и ‘ ’ в прямые кавычки. Ёлочки « » и одиночные угловые ‹ › не меняются.</span></span></label>
+        <label class="cleaner-option"><input type="checkbox" id="cleanDashes"> <span>Нормализовать тире<span class="cleaner-sub">Применяется только к незашищённой прозе. Markdown, код и формулы не затрагиваются.</span></span></label>
+        <label class="cleaner-option"><input type="checkbox" id="cleanTrailing" checked> <span>Убирать хвостовые пробелы<span class="cleaner-sub">Hard line break в Markdown сохраняется: две конечные пробельные позиции не удаляются.</span></span></label>
+        <label class="cleaner-option"><input type="checkbox" id="cleanDoubleSpaces"> <span>Схлопывать множественные пробелы в прозе<span class="cleaner-sub">Консервативный режим: таблицы, списки, код и fenced-блоки пропускаются.</span></span></label>
+      </div>
+      <div class="cleaner-note">Символы синтаксиса Markdown, включая <code>^</code>, а также fenced code, inline code, формулы, Mermaid/ABC-блоки, raw HTML, ссылки и изображения не переписываются.</div>
+    </section>
+
+    <section class="menu-section">
+      <div class="menu-section__title">Статистика</div>
+      <div class="metrics menu-metrics">
+        <div class="metric">
+          <span class="metric-label">Символы Markdown</span>
+          <span class="metric-value" id="metricChars">0</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Слова Markdown</span>
+          <span class="metric-value" id="metricWords">0</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Строки Markdown</span>
+          <span class="metric-value" id="metricLines">0</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Символы результата</span>
+          <span class="metric-value" id="metricNodes">0</span>
+        </div>
+      </div>
+    </section>
+  </div>
+</aside>
+
+  <section class="errors" id="errorsBox">
+    <strong>Во время рендера есть предупреждения:</strong>
+    <ul id="errorsList"></ul>
+  </section>
+
+  <section class="workspace" id="workspace" data-mode="split">
+    <article class="panel editor-panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Markdown</div>
+          <div class="panel-subtitle">Редактирование, drag-and-drop файла, автосохранение в браузере</div>
+        </div>
+      </div>
+      <div class="editor-wrap">
+        <div class="dropzone" id="dropzone">
+          <div>Перетащите сюда <strong>.md</strong> / <strong>.markdown</strong> / <strong>.txt</strong> файл или используйте кнопку импорта.</div>
+          <div>Рендер идёт локально в браузере.</div>
+        </div>
+        <textarea id="md-in" spellcheck="false" placeholder="Вставьте Markdown сюда..."></textarea>
+      </div>
+    </article>
+
+    <article class="panel preview-panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Просмотр</div>
+          <div class="panel-subtitle">Отрендеренный результат: текст, формулы, таблицы, схемы</div>
+        </div>
+      </div>
+      <div class="viewer-wrap">
+        <div class="viewer" id="preview">
+          <div class="viewer-inner" id="preview-inner"></div>
+        </div>
+      </div>
+    </article>
+
+    <article class="panel html-panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">HTML результата</div>
+          <div class="panel-subtitle">HTML-фрагмент документа после преобразования и визуальных рендеров</div>
+        </div>
+      </div>
+      <div class="editor-wrap">
+        <textarea id="html-out" readonly spellcheck="false"></textarea>
+      </div>
+    </article>
+
+    <article class="panel css-panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">CSS документа</div>
+          <div class="panel-subtitle">Стили, которые попадут в экспортируемый HTML; служебные стили страницы сюда не включаются</div>
+        </div>
+      </div>
+      <div class="editor-wrap">
+        <textarea id="css-out" readonly spellcheck="false"></textarea>
+      </div>
+    </article>
+  </section>
+
+  <div class="footer-note">Локальные библиотеки: markdown-it, highlight.js, KaTeX, Mermaid, ABCJS, DOMPurify.</div>
+</div>
+
+<script>
+(() => {
+  const root = document.documentElement;
+  const lang = window.__MD_LOCAL_BOOT_LANG__ || root.lang || 'en';
+  if (lang !== 'en') {
+    root.classList.add('boot-i18n-ready');
+    return;
+  }
+
+  const text = (selector, value) => {
+    const node = document.querySelector(selector);
+    if (node) node.textContent = value;
+  };
+  const html = (selector, value) => {
+    const node = document.querySelector(selector);
+    if (node) node.innerHTML = value;
+  };
+  const attr = (selector, name, value) => {
+    const node = document.querySelector(selector);
+    if (node) node.setAttribute(name, value);
+  };
+
+  document.title = 'Markdown → HTML — local converter';
+  attr('meta[name="description"]', 'content', 'Local Markdown to HTML converter with preview, formulas, Mermaid diagrams, export, and result copying.');
+  const languageSelect = document.getElementById('languageSelect');
+  if (languageSelect) languageSelect.value = 'en';
+
+  text('.hero h1', 'Markdown → HTML');
+  text('.hero p', 'Fully local converter: Markdown, resulting HTML, live preview, KaTeX formulas, Mermaid diagrams, HTML export, and copying as code, plain text, or rich text.');
+  const chips = document.querySelectorAll('.chips .chip');
+  ['No external CDNs', 'Mobile interface', 'Formulas and diagrams', 'Local autosave'].forEach((value, index) => {
+    if (chips[index]) chips[index].textContent = value;
+  });
+
+  text('#convert', 'Convert');
+  text('#pasteBtn', 'Paste');
+  text('#importBtn', 'Import .md');
+  text('#clearBtn', 'Clear');
+  text('[data-view="preview"]', 'Preview');
+  text('#statusText', 'Idle');
+  text('#menuBtn', 'Menu');
+
+  text('.control-menu__head .panel-title', 'Menu');
+  text('.control-menu__head .panel-subtitle', 'Settings, copy actions, export, and test sample');
+  text('#menuCloseBtn', 'Close');
+  attr('#menuCloseBtn', 'aria-label', 'Close menu');
+
+  const sectionTitles = document.querySelectorAll('.menu-section__title');
+  ['View mode', 'Actions', 'Copy', 'Export', null, 'Statistics'].forEach((value, index) => {
+    if (value && sectionTitles[index]) sectionTitles[index].textContent = value;
+  });
+  text('#liveBtn', 'Live');
+  text('#syncBtn', 'Sync scroll');
+  text('#lineNumbersBtn', 'Line numbers');
+  text('#themeBtn', 'Light theme');
+  text('#sampleBtn', 'Test sample');
+  text('#precleanBtn', 'Preclean: on');
+  text('#copyHtmlBtn', 'Copy HTML');
+  text('#copyTextBtn', 'Copy text');
+  text('#copyRichBtn', 'Copy rich text');
+  text('#downloadHtmlBtn', 'Download HTML');
+  text('#downloadMdBtn', 'Download .md');
+  text('#downloadDocxBtn', 'Download .docx');
+  text('#printBtn', 'PDF / print');
+
+  text('.cleaner-box .panel-title', 'Preclean before rendering');
+  text('#cleanMeta', 'Preclean is on. No changes were found in the current text.');
+  const cleanerLabels = {
+    cleanEnabled: ['Enable preclean', 'Preclean runs only before rendering. The source Markdown in the editor is not rewritten.', true],
+    cleanHidden: ['Remove BOM / zero-width / bidi characters', 'Useful for invisible noise copied from web pages and messengers.', false],
+    cleanNbsp: ['Normalize NBSP and narrow NBSP', 'Converts non-breaking spaces to regular spaces except inside protected Markdown segments.', false],
+    cleanQuotes: ['Normalize quotes', 'Converts “ ” and ‘ ’ to straight quotes. Guillemets « » and single angle quotes ‹ › are left unchanged.', false],
+    cleanDashes: ['Normalize dashes', 'Applies only to unprotected prose. Markdown, code, and formulas are not touched.', false],
+    cleanTrailing: ['Remove trailing spaces', 'Markdown hard line breaks are preserved: two trailing whitespace positions are not removed.', false],
+    cleanDoubleSpaces: ['Collapse multiple spaces in prose', 'Conservative mode: tables, lists, code, and fenced blocks are skipped.', false]
+  };
+  Object.entries(cleanerLabels).forEach(([id, [title, sub, strong]]) => {
+    const outer = document.getElementById(id)?.closest('.cleaner-option')?.querySelector(':scope > span');
+    if (!outer) return;
+    outer.innerHTML = (strong ? '<strong>' : '<span>') + title + (strong ? '</strong>' : '</span>') + '<span class="cleaner-sub">' + sub + '</span>';
+  });
+  html('.cleaner-note', 'Markdown syntax characters, including <code>^</code>, as well as fenced code, inline code, formulas, Mermaid/ABC blocks, raw HTML, links, and images are not rewritten.');
+
+  const metricLabels = document.querySelectorAll('.metric-label');
+  ['Markdown characters', 'Markdown words', 'Markdown lines', 'Result characters'].forEach((value, index) => {
+    if (metricLabels[index]) metricLabels[index].textContent = value;
+  });
+
+  const errorsStrong = document.querySelector('#errorsBox strong');
+  if (errorsStrong) errorsStrong.textContent = 'Render warnings:';
+
+  text('.editor-panel .panel-title', 'Markdown');
+  text('.editor-panel .panel-subtitle', 'Editing, file drag-and-drop, browser autosave');
+  text('.preview-panel .panel-title', 'Preview');
+  text('.preview-panel .panel-subtitle', 'Rendered result: text, formulas, tables, diagrams');
+  text('.html-panel .panel-title', 'Result HTML');
+  text('.html-panel .panel-subtitle', 'Document HTML fragment after conversion and visual rendering');
+  text('.css-panel .panel-title', 'Document CSS');
+  text('.css-panel .panel-subtitle', 'Styles included in the exported HTML; application UI styles are not included');
+  const dropParts = document.querySelectorAll('.dropzone > div');
+  if (dropParts[0]) dropParts[0].innerHTML = 'Drop a <strong>.md</strong> / <strong>.markdown</strong> / <strong>.txt</strong> file here or use the import button.';
+  if (dropParts[1]) dropParts[1].textContent = 'Rendering runs locally in the browser.';
+  attr('#md-in', 'placeholder', 'Paste Markdown here...');
+  text('.footer-note', 'Local libraries: markdown-it, highlight.js, KaTeX, Mermaid, ABCJS, DOMPurify.');
+
+  root.classList.add('boot-i18n-ready');
+})();
+</script>
+<script src="js/highlight-all.min.js"></script>
+<script src="js/latex.min.js"></script>
+<script src="js/markdown-it-all.min.js"></script>
+<script src="js/purify.min.js"></script>
+<script src="js/katex.min.js"></script>
+<script src="js/auto-render.min.js"></script>
+<script src="js/mermaid.min.js"></script>
+<script src="js/abcjs-basic.min.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/emoji-loader.js" defer></script>
+</body>
+</html>
+
