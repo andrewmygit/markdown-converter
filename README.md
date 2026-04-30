@@ -106,3 +106,5 @@ This project is licensed under the GNU General Public License v3.0 only.
 Copyright (C) 2026 andrewmygit
 
 See `LICENSE` for the full license text.
+
+Bundled and runtime third-party components retain their original licenses and copyright notices. See `THIRD_PARTY_NOTICES.md` for details.
