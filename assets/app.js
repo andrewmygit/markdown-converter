@@ -212,7 +212,8 @@
       'section.export': 'Экспорт',
       'btn.downloadHtml': 'Скачать HTML',
       'btn.downloadMd': 'Скачать .md',
-      'btn.downloadDocx': 'Скачать .docx',
+      'btn.downloadDocx': 'DOCX отключён',
+      'btn.downloadDocxTitle': 'DOCX экспорт временно отключён',
       'btn.print': 'PDF / печать',
       'clean.title': 'Предочистка перед рендером',
       'clean.enabledTitle': 'Включить предварительную очистку',
@@ -337,7 +338,8 @@
       'section.export': 'Export',
       'btn.downloadHtml': 'Download HTML',
       'btn.downloadMd': 'Download .md',
-      'btn.downloadDocx': 'Download .docx',
+      'btn.downloadDocx': 'DOCX disabled',
+      'btn.downloadDocxTitle': 'DOCX export is temporarily disabled',
       'btn.print': 'PDF / print',
       'clean.title': 'Preclean before rendering',
       'clean.enabledTitle': 'Enable precleaning',
@@ -569,6 +571,11 @@
     setText('#downloadHtmlBtn', 'btn.downloadHtml');
     setText('#downloadMdBtn', 'btn.downloadMd');
     setText('#downloadDocxBtn', 'btn.downloadDocx');
+    const docxBtn = document.getElementById('downloadDocxBtn');
+    if (docxBtn) {
+      docxBtn.title = t('btn.downloadDocxTitle');
+      docxBtn.setAttribute('aria-label', t('btn.downloadDocxTitle'));
+    }
     setText('#printBtn', 'btn.print');
     setText('.cleaner-box .panel-title', 'clean.title');
 
