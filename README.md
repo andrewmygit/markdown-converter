@@ -63,3 +63,46 @@ External images, links, badges, videos, fonts or other remote resources referenc
     ├── markdown-it-all.min.js
     ├── mermaid.min.js
     └── purify.min.js
+```
+
+## Deployment
+
+This project can be hosted as a static site.
+
+Supported deployment options:
+
+- GitHub Pages
+- Apache/Nginx static directory
+- Any static hosting provider
+
+No backend is required for the current browser-based version.
+
+For Apache hosting, `.htaccess` is included to disable directory listing and prevent execution of script files inside this static application directory.
+
+## Local testing
+
+Run a local static server from the project root:
+
+```bash
+python -m http.server 8080
+```
+
+Then open:
+
+```text
+http://localhost:8080/
+```
+
+## Notes
+
+This is a static HTML/CSS/JavaScript application.
+
+The current version is intended for browser-side Markdown preview and export. It is not a secure sandbox for untrusted active content beyond the client-side sanitization already included in the app.
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 only.
+
+Copyright (C) 2026 andrewmygit
+
+See `LICENSE` for the full license text.
